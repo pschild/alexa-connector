@@ -1,9 +1,28 @@
 import * as express from 'express';
 import { Application, Request, Response } from 'express';
 const { exec } = require('child_process');
+import * as mqtt from 'async-mqtt';
 
 const app: Application = express();
 const port = 9072;
+
+const mqttClient = mqtt.connect('http://192.168.178.28:1883');
+mqttClient.subscribe('ESP_7888034/movement');
+
+mqttClient.on('message', (topic, message) => {
+    console.log(`received "${message}" on topic [${topic}]`);
+    if (topic === 'ESP_7888034/movement') {
+        exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e speak:'${message}'`, (error, stdout, stderr) => {
+            if (error) {
+                return console.error(`exec error: ${error}`);
+            }
+            if (stderr) {
+                return console.error(`stderr: ${stderr}`);
+            }
+            return console.log(`stdout: ${stdout}`);
+        });
+    }
+});
 
 app.get('/speak/:speech', (req, res) => {
     const speech = req.params.speech;
@@ -54,6 +73,10 @@ app.get('/show-alexa-devices', (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`running at http://localhost:${port}`);
-});
+mqttClient.on('connect', () => {
+    console.log(`connected with MQTT broker`);
+
+    app.listen(port, () => {
+      console.log(`running at http://localhost:${port}`);
+    });
+  });

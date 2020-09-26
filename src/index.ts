@@ -12,6 +12,16 @@ mqttClient.subscribe('ESP_7888034/movement');
 mqttClient.on('message', (topic, message) => {
     console.log(`received "${message}" on topic [${topic}]`);
     if (topic === 'ESP_7888034/movement') {
+        exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e automation:'Kleines Licht'`, (error, stdout, stderr) => {
+            if (error) {
+                return console.error(`exec error: ${error}`);
+            }
+            if (stderr) {
+                return console.error(`stderr: ${stderr}`);
+            }
+            return console.log(`stdout: ${stdout}`);
+        });
+    } else if (topic === 'alexa/speak') {
         exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e speak:'${message}'`, (error, stdout, stderr) => {
             if (error) {
                 return console.error(`exec error: ${error}`);

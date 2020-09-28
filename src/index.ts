@@ -9,8 +9,15 @@ const port = 9072;
 
 const mqttClient = mqtt.connect('http://192.168.178.28:1883');
 mqttClient.subscribe('ESP_7888034/movement');
+mqttClient.subscribe('x/y/z');
 
-fromEvent(mqttClient, 'message').subscribe(message => console.log('received message in subscription: ', message, JSON.stringify(message)));
+fromEvent(mqttClient, 'message').subscribe(([topic, message]) => {
+    console.log('message in subscription!');
+    console.log('topic=');
+    console.log(topic);
+    console.log('message=');
+    console.log(message);
+});
 
 mqttClient.on('message', (topic, message) => {
     console.log(`received "${message}" on topic [${topic}]`);
@@ -35,6 +42,10 @@ mqttClient.on('message', (topic, message) => {
             return console.log(`stdout: ${stdout}`);
         });
     }
+});
+
+app.get('/xyz', (req, res) => {
+    mqttClient.publish('x/y/z', 'abc');
 });
 
 app.get('/speak/:speech', (req, res) => {

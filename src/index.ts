@@ -2,84 +2,70 @@ import * as express from 'express';
 import { Application } from 'express';
 const { exec } = require('child_process');
 import * as mqtt from 'async-mqtt';
-import { fromEvent } from 'rxjs';
+import { EMPTY, fromEvent, Observable } from 'rxjs';
+import { catchError, filter, map, mergeMap, tap, throttleTime } from 'rxjs/operators';
 
 const app: Application = express();
 const port = 9072;
 
 const mqttClient = mqtt.connect('http://192.168.178.28:1883');
+// const mqttClient = mqtt.connect('http://broker.emqx.io'); // testing
 mqttClient.subscribe('ESP_7888034/movement');
-mqttClient.subscribe('x/y/z');
+mqttClient.subscribe('alexa/speak');
 
-fromEvent(mqttClient, 'message').subscribe(([topic, message]) => {
-    console.log('message in subscription!');
-    console.log('topic=');
-    console.log(topic);
-    console.log('message=');
-    console.log(message);
-});
+function ofTopic(topicName: string) {
+    return filter(([topic, message]) => topic === topicName);
+}
 
-mqttClient.on('message', (topic, message) => {
-    console.log(`received "${message}" on topic [${topic}]`);
-    if (topic === 'ESP_7888034/movement') {
-        exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e automation:'Kleines Licht'`, (error, stdout, stderr) => {
+function execCommand(device: string, command: { action: 'speak' | 'automation', param: string }) {
+    return new Observable(subscriber => {
+        let commandStr = `./alexa-remote-control/alexa_remote_control.sh -d '${device}'`;
+        switch (command.action) {
+            case 'speak':
+                commandStr += ` -e speak:'${command.param}'`;
+                break;
+            case 'automation':
+                commandStr += ` -e automation:'${command.param}'`;
+                break;
+        }
+
+        console.log(`executing command: ${commandStr}`);
+        exec(commandStr, (error, stdout, stderr) => {
             if (error) {
-                return console.error(`exec error: ${error}`);
+                subscriber.error(error);
             }
             if (stderr) {
-                return console.error(`stderr: ${stderr}`);
+                subscriber.error(stderr);
             }
-            return console.log(`stdout: ${stdout}`);
+            subscriber.next(stdout);
+            subscriber.complete();
         });
-    } else if (topic === 'alexa/speak') {
-        exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e speak:'${message}'`, (error, stdout, stderr) => {
-            if (error) {
-                return console.error(`exec error: ${error}`);
-            }
-            if (stderr) {
-                return console.error(`stderr: ${stderr}`);
-            }
-            return console.log(`stdout: ${stdout}`);
-        });
-    }
-});
+    }).pipe(
+        catchError(error => {
+            console.error('exec errored with error: ', error);
+            return EMPTY;
+        })
+    );
+}
 
-app.get('/xyz', (req, res) => {
-    mqttClient.publish('x/y/z', 'abc');
-});
+const messages$ = fromEvent(mqttClient, 'message').pipe(map(([topic, message]) => [topic, message.toString()]));
+
+// movements
+messages$.pipe(
+    ofTopic('ESP_7888034/movement'),
+    throttleTime(1000 * 30),
+    mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'automation', param: 'Kleines Licht' }))
+).subscribe(([topic, message]) => console.log(`x/y/z: ${topic} = ${message}`));
+
+// speak commands
+messages$.pipe(
+    ofTopic('alexa/speak'),
+    tap(console.log),
+    mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'speak', param: message }))
+).subscribe(([topic, message]) => console.log(`a/b/c: ${topic} = ${message}`));
 
 app.get('/speak/:speech', (req, res) => {
-    const speech = req.params.speech;
-    console.log(speech);
-    exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e speak:'${speech}'`, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`exec error: ${error}`);
-            return res.status(500).json({ status: 'error', error });
-        }
-        if (stderr) {
-            console.error(`stderr: ${stderr}`);
-            return res.status(500).json({ status: 'stderr', stderr });
-        }
-        console.log(`stdout: ${stdout}`);
-        return res.status(200).json({ status: 'success', stdout });
-    });
-});
-
-app.get('/automation/:routineName', (req, res) => {
-    const routineName = req.params.routineName; // e.g. Kleines Licht
-    console.log(routineName);
-    exec(`./alexa-remote-control/alexa_remote_control.sh -d 'Philippes Echo Flex' -e automation:'${routineName}'`, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`exec error: ${error}`);
-            return res.status(500).json({ status: 'error', error });
-        }
-        if (stderr) {
-            console.error(`stderr: ${stderr}`);
-            return res.status(500).json({ status: 'stderr', stderr });
-        }
-        console.log(`stdout: ${stdout}`);
-        return res.status(200).json({ status: 'success', stdout });
-    });
+    mqttClient.publish('alexa/speak', req.params.speech);
 });
 
 app.get('/show-alexa-devices', (req, res) => {
@@ -101,6 +87,6 @@ mqttClient.on('connect', () => {
     console.log(`connected with MQTT broker`);
 
     app.listen(port, () => {
-      console.log(`running at http://localhost:${port}`);
+        console.log(`running at http://localhost:${port}`);
     });
-  });
+});

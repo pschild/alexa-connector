@@ -54,11 +54,8 @@ const messages$ = fromEvent(mqttClient, 'message').pipe(map(([topic, message]) =
 // movements
 messages$.pipe(
     ofTopic('ESP_7888034/movement'),
-    tap(([topic, message]) => console.log(`Got message on ESP_7888034/movement... hours=${getHours(new Date())}`)),
     filter(([topic, message]) => getHours(new Date()) >= 23 || getHours(new Date()) <= 8),
-    tap(_ => console.log('hour is between 23 and 8...')),
     throttleTime(1000 * 60 * 5),
-    tap(_ => console.log('not blocked due to time limit...')),
     mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'automation', param: 'Kleines Licht' }))
 ).subscribe(result => console.log(`Result: ${result}`));
 

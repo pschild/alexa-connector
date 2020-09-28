@@ -1,13 +1,16 @@
 import * as express from 'express';
-import { Application, Request, Response } from 'express';
+import { Application } from 'express';
 const { exec } = require('child_process');
 import * as mqtt from 'async-mqtt';
+import { fromEvent } from 'rxjs';
 
 const app: Application = express();
 const port = 9072;
 
 const mqttClient = mqtt.connect('http://192.168.178.28:1883');
 mqttClient.subscribe('ESP_7888034/movement');
+
+fromEvent(mqttClient, 'message').subscribe(message => console.log('received message in subscription: ', message, JSON.stringify(message)));
 
 mqttClient.on('message', (topic, message) => {
     console.log(`received "${message}" on topic [${topic}]`);

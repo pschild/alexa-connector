@@ -35,9 +35,9 @@ function execCommand(device: string, command: { action: 'speak' | 'automation', 
                 subscriber.error(error);
             }
             if (stderr) {
-                subscriber.error(stderr);
+                subscriber.error(stderr.toString());
             }
-            subscriber.next(stdout);
+            subscriber.next(stdout.toString());
             subscriber.complete();
         });
     }).pipe(
@@ -53,16 +53,16 @@ const messages$ = fromEvent(mqttClient, 'message').pipe(map(([topic, message]) =
 // movements
 messages$.pipe(
     ofTopic('ESP_7888034/movement'),
-    throttleTime(1000 * 30),
+    throttleTime(1000 * 60 * 5),
     mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'automation', param: 'Kleines Licht' }))
-).subscribe(([topic, message]) => console.log(`x/y/z: ${topic} = ${message}`));
+).subscribe(([topic, message]) => console.log(`Result: ${topic} = ${message}`));
 
 // speak commands
 messages$.pipe(
     ofTopic('alexa/speak'),
     tap(console.log),
     mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'speak', param: message }))
-).subscribe(([topic, message]) => console.log(`a/b/c: ${topic} = ${message}`));
+).subscribe(([topic, message]) => console.log(`Result: ${topic} = ${message}`));
 
 app.get('/speak/:speech', (req, res) => {
     mqttClient.publish('alexa/speak', req.params.speech);

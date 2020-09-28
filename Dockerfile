@@ -16,7 +16,7 @@ FROM node:13-alpine
 WORKDIR /app
 
 # install dependencies for alexa-remote-control
-RUN apk update && apk add curl jq oath-toolkit-oathtool
+RUN apk update && apk add curl jq oath-toolkit-oathtool tzdata
 
 # copy dist/ and node_modules/
 COPY --from=BUILD_IMAGE /app/dist ./dist
@@ -24,5 +24,7 @@ COPY --from=BUILD_IMAGE /app/node_modules ./node_modules
 COPY --from=BUILD_IMAGE /app/alexa-remote-control ./alexa-remote-control
 
 # run
+ENV TZ=Europe/Berlin
+
 CMD [ "node", "./dist" ]
 EXPOSE 9072

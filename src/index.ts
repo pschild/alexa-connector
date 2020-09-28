@@ -17,8 +17,8 @@ function ofTopic(topicName: string) {
     return filter(([topic, message]) => topic === topicName);
 }
 
-function execCommand(device: string, command: { action: 'speak' | 'automation', param: string }) {
-    return new Observable(subscriber => {
+function execCommand(device: string, command: { action: 'speak' | 'automation', param: string }): Observable<string> {
+    return new Observable<string>(subscriber => {
         let commandStr = `./alexa-remote-control/alexa_remote_control.sh -d '${device}'`;
         switch (command.action) {
             case 'speak':
@@ -37,7 +37,7 @@ function execCommand(device: string, command: { action: 'speak' | 'automation', 
             if (stderr) {
                 subscriber.error(stderr.toString());
             }
-            subscriber.next(stdout.toString());
+            subscriber.next(stdout);
             subscriber.complete();
         });
     }).pipe(
@@ -55,14 +55,14 @@ messages$.pipe(
     ofTopic('ESP_7888034/movement'),
     throttleTime(1000 * 60 * 5),
     mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'automation', param: 'Kleines Licht' }))
-).subscribe(([topic, message]) => console.log(`Result: ${topic} = ${message}`));
+).subscribe(result => console.log(`Result: ${result}`));
 
 // speak commands
 messages$.pipe(
     ofTopic('alexa/speak'),
     tap(console.log),
     mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'speak', param: message }))
-).subscribe(([topic, message]) => console.log(`Result: ${topic} = ${message}`));
+).subscribe(result => console.log(`Result: ${result}`));
 
 app.get('/speak/:speech', (req, res) => {
     mqttClient.publish('alexa/speak', req.params.speech);

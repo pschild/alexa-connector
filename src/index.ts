@@ -2,20 +2,24 @@ import * as express from 'express';
 import { Application } from 'express';
 const { exec } = require('child_process');
 import * as mqtt from 'async-mqtt';
-import { getHours } from 'date-fns';
+import { format } from 'date-fns';
 import { EMPTY, fromEvent, Observable } from 'rxjs';
-import { catchError, filter, map, mergeMap, tap, throttleTime } from 'rxjs/operators';
+import { catchError, filter, map, mergeMap, tap } from 'rxjs/operators';
 
 const app: Application = express();
 const port = 9072;
 
 const mqttClient = mqtt.connect('http://192.168.178.28:1883');
 // const mqttClient = mqtt.connect('http://broker.emqx.io'); // testing
-mqttClient.subscribe('ESP_7888034/movement');
-mqttClient.subscribe('alexa/speak');
+mqttClient.subscribe('alexa/in/automation');
+mqttClient.subscribe('alexa/in/speak');
 
-function ofTopic(topicName: string) {
+function ofTopicEquals(topicName: string) {
     return filter(([topic, message]) => topic === topicName);
+}
+
+function log(logMessage: string) {
+    console.log(`${format(new Date(), 'dd.MM.yyyy HH:mm:ss.SSS')}: ${logMessage}`);
 }
 
 function execCommand(device: string, command: { action: 'speak' | 'automation', param: string }): Observable<string> {
@@ -30,7 +34,7 @@ function execCommand(device: string, command: { action: 'speak' | 'automation', 
                 break;
         }
 
-        console.log(`executing command: ${commandStr}`);
+        log(`executing command: ${commandStr}`);
         exec(commandStr, (error, stdout, stderr) => {
             if (error) {
                 subscriber.error(error);
@@ -49,24 +53,26 @@ function execCommand(device: string, command: { action: 'speak' | 'automation', 
     );
 }
 
-const messages$ = fromEvent(mqttClient, 'message').pipe(map(([topic, message]) => [topic, message.toString()]));
+const messages$ = fromEvent(mqttClient, 'message').pipe(
+    map(([topic, message]) => [topic, message.toString()]),
+    tap(([topic, message]) => log(`Received MQTT message with topic=${topic}, message=${message}`))
+);
 
-// movements
+// automation commands
 messages$.pipe(
-    ofTopic('ESP_7888034/movement'),
-    filter(([topic, message]) => getHours(new Date()) >= 23 || getHours(new Date()) <= 8),
-    throttleTime(1000 * 60 * 5),
-    mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'automation', param: 'Kleines Licht' }))
-).subscribe(result => console.log(`Result: ${result}`));
+    ofTopicEquals('alexa/in/automation'),
+    mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'automation', param: message }))
+).subscribe(result => log(`Result: ${result}`));
 
 // speak commands
 messages$.pipe(
-    ofTopic('alexa/speak'),
+    ofTopicEquals('alexa/in/speak'),
     mergeMap(([topic, message]) => execCommand('Philippes Echo Flex', { action: 'speak', param: message }))
-).subscribe(result => console.log(`Result: ${result}`));
+).subscribe(result => log(`Result: ${result}`));
 
 app.get('/speak/:speech', (req, res) => {
-    mqttClient.publish('alexa/speak', req.params.speech);
+    mqttClient.publish('alexa/in/speak', req.params.speech);
+    res.status(200).end();
 });
 
 app.get('/show-alexa-devices', (req, res) => {
@@ -79,15 +85,15 @@ app.get('/show-alexa-devices', (req, res) => {
             console.error(`stderr: ${stderr}`);
             return res.status(500).json({ status: 'stderr', stderr });
         }
-        console.log(`stdout: ${stdout}`);
+        log(`stdout: ${stdout}`);
         return res.status(200).json({ status: 'success', stdout });
     });
 });
 
 mqttClient.on('connect', () => {
-    console.log(`connected with MQTT broker`);
+    log(`connected with MQTT broker`);
 
     app.listen(port, () => {
-        console.log(`running at http://localhost:${port}`);
+        log(`running at http://localhost:${port}`);
     });
 });

@@ -9,8 +9,8 @@ import { catchError, filter, map, mergeMap, tap } from 'rxjs/operators';
 const app: Application = express();
 const port = 9072;
 
-const mqttClient = mqtt.connect('http://192.168.178.28:1883');
-// const mqttClient = mqtt.connect('http://broker.emqx.io'); // testing
+const mqttClient = mqtt.connect('http://192.168.178.28:1883', { clientId: 'alexa-connector' });
+// const mqttClient = mqtt.connect('http://broker.emqx.io', { clientId: 'alexa-connector' }); // testing
 mqttClient.subscribe('alexa/in/automation');
 mqttClient.subscribe('alexa/in/speak');
 
